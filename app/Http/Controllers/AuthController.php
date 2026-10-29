@@ -5,62 +5,72 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
-    // Регистрация нового пользователя в базе
+    // 3. Регистрация пользователя
     public function register(Request $request)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:6',
+            'password' => 'required|string|min:6|confirmed',
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
+            'role' => 'user', // Роль по умолчанию
         ]);
 
+        $token = $user->createToken('api-token')->plainTextToken;
+
         return response()->json([
-            'success' => true,
             'message' => 'Регистрация успешна',
-            'user' => [
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->email === 'admin' ? 'admin' : 'user'
-            ]
+            'user' => $user,
+            'token' => $token
         ], 201);
     }
 
-    // Вход с проверкой в базе данных
+    // 4. Вход в систему
     public function login(Request $request)
     {
-        $request->validate([
-            'email' => 'required|string',
-            'password' => 'required|string',
+        $credentials = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
         ]);
 
-        // Ищем пользователя по email (или по имени/логину если ввели admin)
-        $user = User::where('email', $request->email)
-                    ->orWhere('name', $request->email)
-                    ->first();
-
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (!Auth::attempt($credentials)) {
             return response()->json([
-                'success' => false,
-                'message' => 'Неверный логин или пароль'
+                'message' => 'Неверный email или пароль'
             ], 401);
         }
 
+        $user = Auth::user();
+        $token = $user->createToken('api-token')->plainTextToken;
+
         return response()->json([
-            'success' => true,
-            'user' => [
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->email === 'admin' || $user->name === 'admin' ? 'admin' : 'user'
-            ]
+            'message' => 'Вход выполнен успешно',
+            'user' => $user,
+            'token' => $token
         ]);
+    }
+
+    // 5. Выход (удаление текущего токена)
+    public function logout(Request $request)
+    {
+        $request->user()->currentAccessToken()->delete();
+
+        return response()->json([
+            'message' => 'Успешный выход из системы'
+        ]);
+    }
+
+    // 6. Получение данных текущего пользователя (/api/user)
+    public function me(Request $request)
+    {
+        return response()->json($request->user());
     }
 }

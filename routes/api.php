@@ -4,26 +4,26 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\PostController;
-use App\Http\Controllers\CommentController;
-use App\Http\Controllers\TagController;
-use App\Http\Controllers\LikeController;
 
-// Группировка маршрутов с версионированием (префикс v1)
-Route::prefix('v1')->group(function () {
-    
-    // Авторизация
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/register', [AuthController::class, 'register']);
+// Публичные маршруты (регистрация и вход)
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
 
-    // Стандартные REST-ресурсы (автоматически создают index, store, show, update, destroy)
-    Route::apiResource('categories', CategoryController::class);
-    Route::apiResource('posts', PostController::class);
+// Публичный просмотр каталога (доступен всем)
+Route::apiResource('categories', CategoryController::class)->only(['index', 'show']);
+Route::apiResource('posts', PostController::class)->only(['index', 'show']);
 
-    // Комментарии (ограничиваем только создание и удаление, либо полный apiResource)
-    Route::apiResource('comments', CommentController::class)->only(['store', 'destroy']);
+// Защищенные маршруты (требуют Bearer токен Sanctum)
+Route::middleware('auth:sanctum')->group(function () {
+    // Управление профилем и выход
+    Route::get('/user', [AuthController::class, 'me']);
+    Route::post('/logout', [AuthController::class, 'logout']);
 
-    // Дополнительные эндпоинты
-    Route::get('/tags', [TagController::class, 'index']);
-    Route::post('/likes/toggle', [LikeController::class, 'toggle']);
+    // Создание/редактирование постов (для авторизованных)
+    Route::apiResource('posts', PostController::class)->except(['index', 'show']);
 
+    // Пример административного маршрута (доступ только с ролью 'admin')
+    Route::get('/admin/stats', function () {
+        return response()->json(['message' => 'Секретная статистика для администратора']);
+    })->middleware('role:admin');
 });
